@@ -7,7 +7,10 @@ namespace CanalTP\MttBundle\Controller;
  */
 use CanalTP\MttBundle\Entity\Calendar;
 use CanalTP\MttBundle\Form\Type\CalendarType;
+use League\Csv\Reader;
+use League\Csv\Writer;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 class CalendarController extends AbstractController
 {
@@ -96,5 +99,78 @@ class CalendarController extends AbstractController
           'no_left_menu' => true,
           'calendars'    => $calendars
         ]);
+    }
+
+    public function exportAction()
+    {
+        $calendars = $this->getDoctrine()
+            ->getRepository('CanalTPMttBundle:Calendar')
+            ->findAll(
+                ['customer' => $this->getUser()->getCustomer()],
+                ['id' => 'desc']
+            )
+        ;
+
+        // grid_calendars.csv
+        $gridCalendars = Writer::createFromFileObject(new \SplTempFileObject());
+        $gridCalendars->setOutputBOM(Reader::BOM_UTF8);
+        $gridCalendars->setDelimiter(';');
+        $headers = [
+            'grid_calendar_id',
+            'name',
+            'monday',
+            'tuesday',
+            'wednesday',
+            'thursday',
+            'friday',
+            'saturday',
+            'sunday',
+        ];
+        $gridCalendars->insertOne($headers);
+
+        foreach ($calendars as $calendar) {
+            $gridCalendars->insertOne([
+                $calendar->getId(),
+                $calendar->getTitle(),
+                (int) $calendar->isCirculateTheDay(0),
+                (int) $calendar->isCirculateTheDay(1),
+                (int) $calendar->isCirculateTheDay(2),
+                (int) $calendar->isCirculateTheDay(3),
+                (int) $calendar->isCirculateTheDay(4),
+                (int) $calendar->isCirculateTheDay(5),
+                (int) $calendar->isCirculateTheDay(6),
+            ]);
+        }
+
+        // grid_periods.csv
+        $gridPeriods = Writer::createFromFileObject(new \SplTempFileObject());
+        $gridPeriods->setOutputBOM(Reader::BOM_UTF8);
+        $gridPeriods->setDelimiter(';');
+        $headers = ['grid_calendar_id', 'start_date', 'end_date'];
+        $gridPeriods->insertOne($headers);
+
+        foreach ($calendars as $calendar) {
+            $gridPeriods->insertOne([
+                $calendar->getId(),
+                $calendar->getStartDate()->format('Ymd'),
+                $calendar->getEndDate()->format('Ymd'),
+            ]);
+        }
+
+        $exportFile = 'export_calendars.zip';
+        $exportPath = sys_get_temp_dir().'/'.$exportFile;
+        unlink($exportPath);
+        $zip = new \ZipArchive();
+        $zip->open(sys_get_temp_dir().'/'.$exportFile, \ZipArchive::CREATE);
+        $zip->addFromString('grid_calendars.csv', (string) $gridCalendars);
+        $zip->addFromString('grid_periods.csv', (string) $gridPeriods);
+        $zip->close();
+
+        $response = new Response();
+        $response->headers->set('Content-Type', 'application/zip');
+        $response->headers->set('Content-Disposition', 'attachment; filename="'.$exportFile.'"');
+        $response->setContent(file_get_contents($exportPath));
+
+        return $response;
     }
 }
