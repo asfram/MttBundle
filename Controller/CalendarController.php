@@ -121,7 +121,7 @@ class CalendarController extends AbstractController
 
         $exportFile = 'export_calendars.zip';
         $exportPath = sys_get_temp_dir().'/'.$exportFile;
-        //unlink($exportPath);
+        
         $zip = new \ZipArchive();
         $zip->open(sys_get_temp_dir().'/'.$exportFile, \ZipArchive::CREATE);
 
