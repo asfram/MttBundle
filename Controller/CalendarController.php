@@ -106,13 +106,20 @@ class CalendarController extends AbstractController
 
     public function exportAction()
     {
-        $calendars = $this->getDoctrine()
-            ->getRepository('CanalTPMttBundle:Calendar')
-            ->findAll(
-                ['customer' => $this->getUser()->getCustomer()],
-                ['id' => 'desc']
-            )
+        $externalCoverageId = $this->getUser()->getCustomer()->getPerimeters()->first()->getExternalCoverageId();
+
+        // Get all calendars from $externalCoverageId
+        $qb = $this->getDoctrine()->getManager()->createQueryBuilder();
+        $qb->select('cal', 'cus')
+            ->from('CanalTPMttBundle:Calendar', 'cal')
+            ->join('cal.customer', 'cus')
+            ->join('cus.navitiaEntity', 'ne')
+            ->join('ne.perimeters', 'per')
+            ->where('per.externalCoverageId=:externalCoverageId')
+            ->setParameter('externalCoverageId', $externalCoverageId);
         ;
+
+        $calendars = $qb->getQuery()->getResult();
 
         $csvModels = [
             new GridCalendarsCsv($calendars),
@@ -121,7 +128,7 @@ class CalendarController extends AbstractController
 
         $exportFile = 'export_calendars.zip';
         $exportPath = sys_get_temp_dir().'/'.$exportFile;
-        
+
         $zip = new \ZipArchive();
         $zip->open(sys_get_temp_dir().'/'.$exportFile, \ZipArchive::CREATE);
 
